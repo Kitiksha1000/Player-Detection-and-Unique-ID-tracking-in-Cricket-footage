@@ -1,108 +1,80 @@
-# Player Detection and Unique ID Tracking in Cricket Footage
+# Player Tracking Pipeline using YOLOv8 and ByteTrack
 
-## 1. Project Overview
-This computer vision pipeline is designed to detect players in cricket match footage and assign consistent, unique IDs to them across the video sequence. It leverages **YOLOv5** for object detection and **DeepSORT** for multi-object tracking (MOT). The solution addresses challenges such as occlusion, visual similarity (uniforms), and camera motion.
+**Author:** Kitiksha Chakrawarti
 
-**Key Features:**
-* **Robust Tracking:** Uses Kalman Filters and Re-Identification (ReID) to maintain IDs even after temporary occlusions.
-* **Crash Recovery:** Implements a chunk-wise processing system that saves progress automatically to Google Drive, allowing the script to resume after runtime disconnects.
-* **Resource Optimized:** Designed to run within the constraints of the Google Colab free tier (Tesla T4 GPU).
+## Project Overview
+This project implements a computer vision pipeline for detecting and tracking players in sports videos (specifically football/soccer). It utilizes **YOLOv8** for state-of-the-art object detection and **ByteTrack** for robust multi-object tracking. The system processes video footage to identify players, assign unique tracking IDs, and visualize their movement trajectories.
 
----
+The solution is designed to be run in a GPU-accelerated environment (specifically Google Colab) and includes necessary workarounds for library compatibility between recent YOLO versions and the ByteTrack algorithm.
 
-## 2. Dependencies
-The project requires a Python environment with GPU support (CUDA). The specific libraries used are:
+## Dependencies
+The project requires **Python 3.x** and a GPU-enabled environment. Key dependencies include:
 
-* **Python 3.8+**
-* **YOLOv5 (Ultralytics)**: For object detection.
-* **DeepSORT Realtime**: For tracking algorithms (Kalman Filter + ReID).
-* **OpenCV (`opencv-python-headless`)**: For video frame manipulation.
-* **PyTorch**: Deep learning framework backend.
-* **FFmpeg**: For lossless video merging.
+* **Ultralytics YOLOv8** (`ultralytics<=8.3.40`): For player detection.
+* **ByteTrack**: Multi-object tracking algorithm (installed from source).
+* **Supervision** (`supervision==0.1.0`): For annotating video frames and handling geometry.
+* **YOLOX**: A dependency required by ByteTrack.
+* **NumPy**: Specific version compatibility required for YOLOX.
+* **Helper Libraries**: `cython_bbox`, `onemetric`, `loguru`, `lap`, `thop`, `opencv-python`.
 
-**Automatic Installation:**
-The notebook includes a setup cell that automatically installs the required non-standard libraries
+## Installation Instructions
 
-## Setup Instructions
+### Option 1: Google Colab (Recommended)
+This notebook is optimized for Google Colab. No manual local setup is required.
+1.  Open the notebook in Google Colab.
+2.  Run the **Environment Setup** cells at the very top. These cells will automatically:
+    * Install the required Python packages (`ultralytics`, `supervision`, etc.).
+    * Clone the ByteTrack repository.
+    * Install ByteTrack dependencies and apply necessary patches.
 
-### 1. Prepare Your Environment
+### Option 2: Local Installation
+If you prefer to run this locally, ensure you have a CUDA-capable GPU and follow these steps:
 
-1. Upload the `.ipynb` notebook file to Google Colab
-2. Upload your cricket video footage to Google Drive (e.g., `Khel_AI_assignment_Video_1.mp4`)
-3. Create an output folder in Google Drive for processed chunks
+1.  **Clone the Repository**
+    ```bash
+    git clone [https://github.com/ifzhang/ByteTrack.git](https://github.com/ifzhang/ByteTrack.git)
+    cd ByteTrack
+    ```
 
-### 2. Mount Google Drive
+2.  **Install Python Dependencies**
+    ```bash
+    pip install "ultralytics<=8.3.40" supervision==0.1.0
+    pip install cython_bbox onemetric loguru lap thop
+    ```
 
-Run the drive mounting cell to enable file access:
-```python
-from google.colab import drive
-drive.mount('/content/drive')
-```
+3.  **Install ByteTrack**
+    Inside the `ByteTrack` directory:
+    ```bash
+    pip install -r requirements.txt
+    python3 setup.py develop
+    ```
 
-### 3. Configure Paths
+## Steps to Run the Pipeline
 
-Update the configuration cell with your specific paths:
-```python
-INPUT_VIDEO_PATH = '/content/drive/MyDrive/your_folder/Khel_AI_assignment_Video_1.mp4'
-OUTPUT_DIR = '/content/drive/MyDrive/your_output_folder/'
-```
+1.  **Enable GPU Acceleration**
+    * **Colab:** Go to `Edit` > `Notebook settings` > Select `GPU` (e.g., T4) as the Hardware accelerator.
+    * **Local:** Ensure your CUDA drivers are correctly installed.
 
-## Running the Pipeline
+2.  **Mount Storage (Colab Only)**
+    * Run the cell to mount Google Drive:
+        ```python
+        from google.colab import drive
+        drive.mount('/content/drive')
+        ```
+    * Ensure your input video is uploaded to your Google Drive.
 
-Execute the notebook cells in sequential order:
+3.  **Run Setup and Imports**
+    * Execute the initialization cells to load libraries and define the `BYTETrackerArgs` class.
 
-### Step 1: Configuration
-- Locate and run the configuration cell
-- Verify `INPUT_VIDEO_PATH` points to your video file
-- Ensure `OUTPUT_DIR` is set to a valid Google Drive folder
+4.  **Configure Paths**
+    * Locate the variable `SOURCE_VIDEO_PATH` in the notebook.
+    * Update it to point to your specific video file (e.g., `/content/drive/MyDrive/path/to/video.mp4`).
 
-### Step 2: Model Loading
-- Run initialization cells to download YOLOv5 weights
-- Initialize the DeepSORT tracker
-
-### Step 3: Video Processing
-- Run the main processing loop
-- The pipeline will process video in chunks and save progress automatically
-- **Note**: If Colab crashes or times out, simply restart the runtime and re-run the processing cell - it will automatically resume from the last saved chunk
-
-### Step 4: Final Merge
-- Run the merging cells to combine all chunks
-- The script copies chunks locally to prevent Drive I/O errors
-- FFmpeg concatenates chunks into a single seamless video
-
-## Output
-
-The pipeline generates:
-
-### Intermediate Files
-- **Chunk Files**: Individual `.mp4` files saved to Google Drive
-  - Format: `tracked_part_00001.mp4`, `tracked_part_00002.mp4`, etc.
-  - Automatically saved during processing for crash recovery
-
-### Final Output
-- **Merged Video**: Single complete file
-  - Filename: `final_merged_output.mp4` or `final_tracked_output.mp4`
-  - Location: Specified output directory
-
-## Troubleshooting
-
-### Common Issues
-
-#### Google Colab Timeouts
-- **Symptom**: Runtime disconnects during long videos (45+ minutes)
-- **Solution**: Built-in resume logic handles this automatically
-  1. Restart the runtime
-  2. Re-run the processing cell
-  3. Pipeline detects existing chunks and continues from last saved frame
-
-#### Drive Latency/File Corruption
-- **Symptom**: Errors during video merging
-- **Solution**: Merging step performs local copy (`shutil.copy`) before processing
-- **Note**: This is intentional to avoid corruption from reading streams directly from Google Drive
-
-### Performance Optimization
-
-- Process videos in smaller segments if experiencing frequent timeouts
-- Ensure stable internet connection for Google Drive synchronization
-- Monitor GPU usage in Colab to stay within free tier limits
-
+5.  **Execute Tracking**
+    * Run the main inference loop.
+    * The pipeline will:
+        1.  Extract frames from the video.
+        2.  Detect players using YOLOv8 (`yolov8x.pt` is used by default).
+        3.  Track players across frames using ByteTrack.
+        4.  Annotate the video with bounding boxes and IDs.
+        5.  Save the resulting video to the output path.
